@@ -2,8 +2,7 @@
 
 ## CloudFront URL
 
-https://d1myvv8fe3cilh.cloudfront.net/
-https://static-bucket-s.s3.us-east-1.amazonaws.com/ - for task 2.1
+https://d1sw9bx1ya5rdm.cloudfront.net/
 
 This is a blank project for CDK development with TypeScript.
 

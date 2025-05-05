@@ -6,7 +6,7 @@ import { Construct } from "constructs";
 
 const LAMBDA_HANDLERS_PATH = path.join(__dirname, "../lambda/handlers");
 console.log("LAMBDA_HANDLERS_PATH", LAMBDA_HANDLERS_PATH);
-export class HelloLambdaStack extends cdk.Stack {
+export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -17,8 +17,8 @@ export class HelloLambdaStack extends cdk.Stack {
         runtime: lambda.Runtime.NODEJS_20_X,
         memorySize: 1024,
         timeout: cdk.Duration.seconds(5),
-        handler: "getProductsList.handler",
-        code: lambda.Code.fromAsset(LAMBDA_HANDLERS_PATH),
+        handler: "index.handler",
+        code: lambda.Code.fromAsset("dist/getProductsList"),
       }
     );
 
@@ -29,8 +29,8 @@ export class HelloLambdaStack extends cdk.Stack {
         runtime: lambda.Runtime.NODEJS_20_X,
         memorySize: 1024,
         timeout: cdk.Duration.seconds(5),
-        handler: "getProductsList.handler",
-        code: lambda.Code.fromAsset(LAMBDA_HANDLERS_PATH),
+        handler: "index.handler",
+        code: lambda.Code.fromAsset("dist/getProductsById"),
       }
     );
 

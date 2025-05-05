@@ -1,13 +1,13 @@
-import { Stack, type StackProps } from "aws-cdk-lib";
+import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { DeploymentService } from "./deployment-service";
-import { HelloLambdaStack } from "./product-service-stack";
+import { ProductServiceStack } from "./product-service-stack";
 
-export class DeployWebAppStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+export class DeployWebAppStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     new DeploymentService(this, "deployment");
-    new HelloLambdaStack(this, "lambda-test-service");
+    new ProductServiceStack(this, "product-service-lambda-stack");
   }
 }

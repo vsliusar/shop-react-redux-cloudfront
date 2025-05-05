@@ -5,6 +5,7 @@
     "infra": "bin/infra.js"
   },
   "scripts": {
+    "build-lambdas": "ts-node build-lambdas.ts",
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
@@ -13,9 +14,10 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "22.7.9",
+    "aws-cdk": "2.1007.0",
+    "esbuild": "^0.25.3",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
-    "aws-cdk": "2.1007.0",
     "ts-node": "^10.9.2",
     "typescript": "~5.6.3"
   },
