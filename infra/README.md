@@ -2,7 +2,7 @@
 
 ## CloudFront URL
 
-https://d1sw9bx1ya5rdm.cloudfront.net/
+https://d204cu7nba40yp.cloudfront.net/
 
 This is a blank project for CDK development with TypeScript.
 
