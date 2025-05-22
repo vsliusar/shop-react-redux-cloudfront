@@ -14,7 +14,7 @@ export class DeploymentService extends Construct {
   constructor(scope: Construct, id: string) {
     super(scope, id);
 
-    const hostingBucket = new aws_s3.Bucket(this, "FrontendBucket2", {
+    const hostingBucket = new aws_s3.Bucket(this, "FrontendBucket", {
       publicReadAccess: false,
       blockPublicAccess: aws_s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
@@ -44,7 +44,7 @@ export class DeploymentService extends Construct {
       }
     );
 
-    new aws_s3_deployment.BucketDeployment(this, "BucketDeployment2", {
+    new aws_s3_deployment.BucketDeployment(this, "BucketDeployment", {
       sources: [aws_s3_deployment.Source.asset(path)],
       destinationBucket: hostingBucket,
       distribution,
@@ -54,13 +54,13 @@ export class DeploymentService extends Construct {
     new CfnOutput(this, "CloudFrontURL", {
       value: distribution.domainName,
       description: "The distribution URL",
-      exportName: "CloudfrontURL-v2",
+      exportName: "CloudfrontURL",
     });
 
     new CfnOutput(this, "BucketName", {
       value: hostingBucket.bucketName,
       description: "The name of the S3 bucket",
-      exportName: "BucketName-v2",
+      exportName: "BucketName",
     });
   }
 }
