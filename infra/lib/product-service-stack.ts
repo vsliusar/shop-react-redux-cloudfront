@@ -1,88 +1,157 @@
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as cdk from "aws-cdk-lib";
-import * as path from "path";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { join } from "path";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 
-const LAMBDA_HANDLERS_PATH = path.join(__dirname, "../lambda/handlers");
-console.log("LAMBDA_HANDLERS_PATH", LAMBDA_HANDLERS_PATH);
 export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const getProductsListLambda = new lambda.Function(
+    const productsTable = dynamodb.Table.fromTableArn(
       this,
-      "getProductsList-lambda",
+      "products",
+      `arn:aws:dynamodb:${this.region}:${this.account}:table/products`
+    );
+    const stockTable = dynamodb.Table.fromTableArn(
+      this,
+      "stock",
+      `arn:aws:dynamodb:${this.region}:${this.account}:table/stock`
+    );
+
+    const api = new apigateway.RestApi(this, "product-api", {
+      restApiName: "Product Service",
+      description: "This API handles product requests.",
+    });
+
+    const getProductsListLambda = new NodejsFunction(
+      this,
+      "get-products-list",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         memorySize: 1024,
         timeout: cdk.Duration.seconds(5),
-        handler: "index.handler",
-        code: lambda.Code.fromAsset("dist/getProductsList"),
+        handler: "handler",
+        entry: join(__dirname, "../lambda/handlers/getProductsList.ts"),
+        environment: {
+          PRODUCTS_TABLE: productsTable.tableName,
+          STOCK_TABLE: stockTable.tableName,
+          AWS_NODE_JS_CONNECTION_REUSE_ENABLED: "1",
+        },
       }
     );
 
-    const getProductsByIdLambda = new lambda.Function(
-      this,
-      "getProductsById-lambda",
-      {
-        runtime: lambda.Runtime.NODEJS_20_X,
-        memorySize: 1024,
-        timeout: cdk.Duration.seconds(5),
-        handler: "index.handler",
-        code: lambda.Code.fromAsset("dist/getProductsById"),
-      }
-    );
+    getProductsListLambda.addPermission("apigateway-invoke", {
+      principal: new cdk.aws_iam.ServicePrincipal("apigateway.amazonaws.com"),
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${api.restApiId}/prod/products/available`,
+    });
 
-    const api = new apigateway.RestApi(this, "my-product-service-api", {
-      restApiName: "My Product Service API Gateway",
-      description: "This API serves the Product Service Lambda functions.",
-      defaultCorsPreflightOptions: {
-        allowOrigins: ["https://d1myvv8fe3cilh.cloudfront.net/"],
-        allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
+    productsTable.grantReadData(getProductsListLambda);
+    stockTable.grantReadData(getProductsListLambda);
+
+    const getProductByIdLambda = new NodejsFunction(this, "get-product-by-id", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(5),
+      handler: "handler",
+      entry: join(__dirname, "../lambda/handlers/getProductById.ts"),
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCK_TABLE: stockTable.tableName,
+        AWS_NODE_JS_CONNECTION_REUSE_ENABLED: "1",
       },
     });
 
-    // Task 3.1: Create /products resource and GET method
-    const productsResource = api.root.addResource("products");
+    getProductByIdLambda.addPermission("apigateway-invoke", {
+      principal: new cdk.aws_iam.ServicePrincipal("apigateway.amazonaws.com"),
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${api.restApiId}/prod/products/*`,
+    });
 
-    const getProductsListIntegration = new apigateway.LambdaIntegration(
-      getProductsListLambda,
-      {
+    productsTable.grantReadData(getProductByIdLambda);
+    stockTable.grantReadData(getProductByIdLambda);
+
+    const createProductLambda = new NodejsFunction(this, "create-product", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(5),
+      handler: "handler",
+      entry: join(__dirname, "../lambda/handlers/createProduct.ts"),
+      environment: {
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCK_TABLE: stockTable.tableName,
+        AWS_NODE_JS_CONNECTION_REUSE_ENABLED: "1",
+      },
+    });
+
+    createProductLambda.addPermission("apigateway-invoke", {
+      principal: new cdk.aws_iam.ServicePrincipal("apigateway.amazonaws.com"),
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${api.restApiId}/prod/products/*`,
+    });
+
+    productsTable.grantWriteData(createProductLambda);
+    stockTable.grantWriteData(createProductLambda);
+
+    const productResource = api.root.addResource("products");
+    productResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createProductLambda, {
         proxy: true,
-      }
-    );
-
-    productsResource.addMethod("GET", getProductsListIntegration, {
-      methodResponses: [{ statusCode: "200" }],
-    });
-
-    const productByIdResource = productsResource.addResource("{productId}");
-
-    const getProductsByIdIntegration = new apigateway.LambdaIntegration(
-      getProductsByIdLambda,
+      }),
       {
-        requestTemplates: {
-          "application/json": `{
-            "productId": "$input.params('productId')"
-          }`,
-        },
-        integrationResponses: [
-          { statusCode: "200" },
-          { statusCode: "404", selectionPattern: '.*"statusCode":404.*' },
+        methodResponses: [
+          { statusCode: "201" },
+          { statusCode: "400" },
+          { statusCode: "500" },
         ],
-        proxy: false,
       }
     );
 
-    productByIdResource.addMethod("GET", getProductsByIdIntegration, {
-      methodResponses: [{ statusCode: "200" }, { statusCode: "404" }],
+    productResource.addCorsPreflight({
+      allowOrigins: ["*"],
+      allowMethods: ["POST"],
+      allowHeaders: ["Content-Type", "Authorization"],
     });
 
-    new cdk.CfnOutput(this, "ProductServiceApiUrl", {
-      value: api.url,
-      description: "URL of the Product Service API Gateway",
+    const productListResource = productResource.addResource("available");
+
+    productListResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getProductsListLambda, {
+        proxy: true,
+        integrationResponses: [{ statusCode: "200" }],
+      }),
+      {
+        methodResponses: [{ statusCode: "200" }, { statusCode: "500" }],
+      }
+    );
+
+    productListResource.addCorsPreflight({
+      allowOrigins: ["*"],
+      allowMethods: ["GET"],
+    });
+
+    const productByIdResource = productResource.addResource("{productId}");
+
+    productByIdResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getProductByIdLambda, {
+        proxy: true,
+        integrationResponses: [{ statusCode: "200" }],
+      }),
+      {
+        methodResponses: [
+          { statusCode: "200" },
+          { statusCode: "404" },
+          { statusCode: "500" },
+        ],
+      }
+    );
+
+    productByIdResource.addCorsPreflight({
+      allowOrigins: ["*"],
+      allowMethods: ["GET"],
     });
   }
 }

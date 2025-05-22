@@ -1,21 +1,51 @@
-import { getAllProducts } from "../data/products";
-import { buildApiResponse } from "../utils/apiResponse";
+import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
 
-/**
- * Lambda function handler for getting the list of all products.
- * @param {Object} event - The API Gateway event.
- * @returns {Promise<Object>} An API Gateway proxy response object.
- */
+const client = new DynamoDBClient({ region: process.env.AWS_REGION });
 
-export const handler = async (event: any) => {
+const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE!;
+const STOCK_TABLE = process.env.STOCK_TABLE!;
+
+export async function handler() {
   try {
-    console.log("Received event:", JSON.stringify(event, null, 2));
+    const productsData = await client.send(
+      new ScanCommand({ TableName: PRODUCTS_TABLE })
+    );
+    const stockData = await client.send(
+      new ScanCommand({ TableName: STOCK_TABLE })
+    );
 
-    const products = getAllProducts();
+    const products = (productsData.Items || []).map((item) => ({
+      id: item.id.S!,
+      title: item.title.S!,
+      description: item.description.S!,
+      price: Number(item.price.N!),
+    }));
 
-    return buildApiResponse(200, products);
+    const stockMap = new Map(
+      (stockData.Items || []).map((item) => [
+        item.product_id.S!,
+        Number(item.count.N!),
+      ])
+    );
+
+    const joinedProducts = products.map((product) => ({
+      ...product,
+      count: stockMap.get(product.id) ?? 0,
+    }));
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Credentials": true,
+      },
+      body: JSON.stringify(joinedProducts),
+    };
   } catch (error) {
     console.error("Error fetching products:", error);
-    return buildApiResponse(500, { message: "Internal Server Error" });
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Failed to fetch products!" }),
+    };
   }
-};
+}
