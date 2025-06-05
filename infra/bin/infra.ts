@@ -3,6 +3,7 @@ import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
 import { DeployWebAppStack } from "../lib/infra-stack";
 import { ProductServiceStack } from "../lib/product-service-stack";
+import { ImportServiceStack } from "../lib/import-service-stack";
 
 const app = new cdk.App();
 new DeployWebAppStack(app, "DeployWebAppStack", {
@@ -19,3 +20,4 @@ new DeployWebAppStack(app, "DeployWebAppStack", {
 });
 
 new ProductServiceStack(app, "product-service-lambda-stack");
+new ImportServiceStack(app, "import-service-s3-stack-4");
