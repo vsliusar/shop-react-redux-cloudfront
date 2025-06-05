@@ -4,7 +4,7 @@ import * as fs from "fs";
 
 const lambdas = [
   { name: "getProductsList", entry: "lambda/handlers/getProductsList.ts" },
-  { name: "getProductsById", entry: "lambda/handlers/getProduct§ById.ts" },
+  { name: "getProductsById", entry: "lambda/handlers/getProductsById.ts" },
 ];
 
 (async () => {

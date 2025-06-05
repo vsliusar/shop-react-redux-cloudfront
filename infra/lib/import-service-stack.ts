@@ -2,132 +2,84 @@ import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
-import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import * as s3n from "aws-cdk-lib/aws-lambda-event-sources";
 import { join } from "path";
-import * as s3n from "aws-cdk-lib/aws-s3-notifications";
-
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // Create S3 bucket for import service
-    const importBucket = new s3.Bucket(this, "import-service-bucket", {
-      bucketName: `import-service-bucket-${this.account}`,
-      cors: [
-        {
-          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT],
-          allowedOrigins: ["*"],
-          allowedHeaders: ["*"],
-        },
-      ],
+    const bucket = new s3.Bucket(this, "ImportServiceBucket", {
+      bucketName: `import-service-bucket-${this.account}-4`,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
-    });
-
-    // Initialize folder structure with empty objects using a custom resource
-    new cdk.CustomResource(this, "InitializeFolders", {
-      serviceToken: new NodejsFunction(this, "FolderInitializer", {
-        runtime: lambda.Runtime.NODEJS_20_X,
-        memorySize: 128,
-        handler: "handler",
-        entry: join(__dirname, "../lambda/handlers/folderInitializer.ts"),
-        bundling: {
-          minify: true,
-          sourceMap: true,
+      cors: [
+        {
+          allowedOrigins: ["https://d204cu7nba40yp.cloudfront.net"],
+          allowedMethods: [
+            s3.HttpMethods.GET,
+            s3.HttpMethods.PUT,
+            s3.HttpMethods.HEAD,
+          ],
+          allowedHeaders: ["*"],
+          exposedHeaders: ["ETag"],
         },
-      }).functionArn,
-      properties: {
-        BucketName: importBucket.bucketName,
-        Version: Date.now().toString(), // Force update if redeployed
-      },
+      ],
     });
 
-    // Create Lambda function
     const importProductsFileLambda = new NodejsFunction(
       this,
-      "import-products-file",
+      "ImportProductsFileLambda",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
-        memorySize: 1024,
-        timeout: cdk.Duration.seconds(5),
         handler: "handler",
         entry: join(__dirname, "../lambda/handlers/importProductsFile.ts"),
+        functionName: "importProductsFileLambda",
         environment: {
-          BUCKET_NAME: importBucket.bucketName,
+          BUCKET_NAME: bucket.bucketName,
         },
-        initialPolicy: [
-          new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: ["s3:PutObject", "s3:GetObject"],
-            resources: [`${importBucket.bucketArn}/*`],
-          }),
-        ],
       }
     );
 
-    const importFileParserLambda = new NodejsFunction(
-      this,
-      "import-file-parser",
-      {
-        runtime: lambda.Runtime.NODEJS_20_X,
-        memorySize: 1024,
-        timeout: cdk.Duration.seconds(30),
-        handler: "handler",
-        entry: join(__dirname, "../lambda/handlers/importFileParser.ts"),
-        environment: {
-          BUCKET_NAME: importBucket.bucketName,
-        },
-        initialPolicy: [
-          new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-            resources: [`${importBucket.bucketArn}/*`],
-          }),
-        ],
-      }
-    );
+    bucket.grantReadWrite(importProductsFileLambda);
 
-    // Grant S3 permissions to Lambda
-    importBucket.grantPut(importProductsFileLambda);
-    importBucket.grantRead(importProductsFileLambda);
-
-    // Grant S3 permissions
-    importBucket.grantRead(importFileParserLambda);
-    importBucket.grantWrite(importFileParserLambda);
-    importBucket.grantDelete(importFileParserLambda);
-
-    // Add S3 notification for uploaded folder
-    importBucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(importFileParserLambda),
-      { prefix: "uploaded/" }
-    );
-
-    // Create API Gateway
-    const api = new apigateway.RestApi(this, "import-api", {
-      restApiName: "Import Service",
-      description: "This API handles import operations",
+    const api = new apigateway.RestApi(this, "ImportServiceAPI", {
+      restApiName: "Import Service API",
     });
 
-    // Create import resource and method
     const importResource = api.root.addResource("import");
     importResource.addMethod(
       "GET",
-      new apigateway.LambdaIntegration(importProductsFileLambda),
+      new apigateway.LambdaIntegration(importProductsFileLambda)
+    );
+
+    importResource.addCorsPreflight({
+      allowOrigins: ["*"],
+      allowMethods: ["GET", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+    });
+
+    const importFileParserLambda = new NodejsFunction(
+      this,
+      "ImportFileParserLambda",
       {
-        requestParameters: {
-          "method.request.querystring.name": true,
+        runtime: lambda.Runtime.NODEJS_20_X,
+        handler: "handler",
+        entry: join(__dirname, "../lambda/handlers/importFileParser.ts"),
+        environment: {
+          BUCKET_NAME: bucket.bucketName,
         },
       }
     );
 
-    // Add CORS support
-    importResource.addCorsPreflight({
-      allowOrigins: ["*"],
-      allowMethods: ["GET"],
-      allowHeaders: ["Content-Type", "Authorization"],
-    });
+    bucket.grantReadWrite(importFileParserLambda);
+
+    importFileParserLambda.addEventSource(
+      new s3n.S3EventSource(bucket, {
+        events: [s3.EventType.OBJECT_CREATED],
+        filters: [{ prefix: "uploaded/" }],
+      })
+    );
   }
 }

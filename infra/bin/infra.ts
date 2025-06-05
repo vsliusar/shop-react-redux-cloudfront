@@ -20,4 +20,4 @@ new DeployWebAppStack(app, "DeployWebAppStack", {
 });
 
 new ProductServiceStack(app, "product-service-lambda-stack");
-new ImportServiceStack(app, "import-service-s3-stack");
+new ImportServiceStack(app, "import-service-s3-stack-4");
