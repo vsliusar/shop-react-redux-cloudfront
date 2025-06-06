@@ -6,8 +6,14 @@ import { Construct } from "constructs";
 import * as s3n from "aws-cdk-lib/aws-lambda-event-sources";
 import { join } from "path";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { IQueue } from "aws-cdk-lib/aws-sqs";
+
+interface ImportServiceStackProps extends cdk.StackProps {
+  catalogItemsQueue: IQueue;
+}
+
 export class ImportServiceStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: ImportServiceStackProps) {
     super(scope, id, props);
 
     const bucket = new s3.Bucket(this, "ImportServiceBucket", {
@@ -81,5 +87,12 @@ export class ImportServiceStack extends cdk.Stack {
         filters: [{ prefix: "uploaded/" }],
       })
     );
+
+    const catalogItemsQueue = props.catalogItemsQueue;
+    importFileParserLambda.addEnvironment(
+      "CATALOG_ITEMS_QUEUE_URL",
+      catalogItemsQueue.queueUrl
+    );
+    catalogItemsQueue.grantSendMessages(importFileParserLambda);
   }
 }

@@ -7,8 +7,10 @@ import {
 import { S3Event } from "aws-lambda";
 import { Readable } from "stream";
 import csv from "csv-parser";
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 
 const s3 = new S3Client({ region: "us-east-1" });
+const sqs = new SQSClient({ region: "us-east-1" });
 
 export const handler = async (event: S3Event): Promise<void> => {
   for (const record of event.Records) {
@@ -30,7 +32,19 @@ export const handler = async (event: S3Event): Promise<void> => {
       await new Promise<void>((resolve, reject) => {
         (Body as Readable)
           .pipe(csv())
-          .on("data", (row: any) => console.log("CSV row:", row))
+          .on("data", async (row: any) => {
+            try {
+              const messageBody = JSON.stringify(row);
+              await sqs.send(
+                new SendMessageCommand({
+                  QueueUrl: process.env.CATALOG_ITEMS_QUEUE_URL!,
+                  MessageBody: messageBody,
+                })
+              );
+            } catch (error) {
+              console.error("Failed to send SQS message", error);
+            }
+          })
           .on("end", resolve)
           .on("error", reject);
       });

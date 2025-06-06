@@ -5,8 +5,13 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 import { join } from "path";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { Queue } from "aws-cdk-lib/aws-sqs";
+import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 
 export class ProductServiceStack extends cdk.Stack {
+  public readonly catalogItemsQueue: Queue;
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -153,5 +158,48 @@ export class ProductServiceStack extends cdk.Stack {
       allowOrigins: ["*"],
       allowMethods: ["GET"],
     });
+
+    this.catalogItemsQueue = new Queue(this, "CatalogItemsQueue", {
+      visibilityTimeout: cdk.Duration.seconds(30),
+    });
+
+    const catalogBatchProcessLambda = new NodejsFunction(
+      this,
+      "CatalogBatchProcessLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        handler: "handler",
+        entry: join(__dirname, "../lambda/handlers/catalogBatchProcess.ts"),
+        functionName: "catalogBatchProcessLambda",
+        environment: {
+          PRODUCTS_TABLE: "products",
+          STOCK_TABLE: "stock",
+        },
+      }
+    );
+
+    productsTable.grantWriteData(catalogBatchProcessLambda);
+    stockTable.grantWriteData(catalogBatchProcessLambda);
+
+    catalogBatchProcessLambda.addEventSource(
+      new lambdaEventSources.SqsEventSource(this.catalogItemsQueue, {
+        batchSize: 5,
+      })
+    );
+
+    const createProductTopic = new sns.Topic(this, "CreateProductTopic", {
+      topicName: "create-product-topic",
+    });
+
+    createProductTopic.addSubscription(
+      new subs.EmailSubscription("mzgme23@gmail.com")
+    );
+
+    catalogBatchProcessLambda.addEnvironment(
+      "CREATE_PRODUCT_TOPIC_ARN",
+      createProductTopic.topicArn
+    );
+
+    createProductTopic.grantPublish(catalogBatchProcessLambda);
   }
 }

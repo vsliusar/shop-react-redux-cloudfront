@@ -18,6 +18,10 @@ new DeployWebAppStack(app, "DeployWebAppStack", {
   // env: { account: '123456789012', region: 'us-east-1' },
   /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
 });
-
-new ProductServiceStack(app, "product-service-lambda-stack");
-new ImportServiceStack(app, "import-service-s3-stack-4");
+const productServiceStack = new ProductServiceStack(
+  app,
+  "product-service-lambda-stack"
+);
+new ImportServiceStack(app, "import-service-s3-stack-4", {
+  catalogItemsQueue: productServiceStack.catalogItemsQueue,
+});
