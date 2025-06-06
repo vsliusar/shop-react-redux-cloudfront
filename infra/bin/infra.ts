@@ -4,6 +4,8 @@ import * as cdk from "aws-cdk-lib";
 import { DeployWebAppStack } from "../lib/infra-stack";
 import { ProductServiceStack } from "../lib/product-service-stack";
 import { ImportServiceStack } from "../lib/import-service-stack";
+import { AuthorizationServiceStack } from "../lib/authorization-service-stack";
+import { ImportApiGatewayStack } from "../lib/import-api-gateway";
 
 const app = new cdk.App();
 new DeployWebAppStack(app, "DeployWebAppStack", {
@@ -20,8 +22,26 @@ new DeployWebAppStack(app, "DeployWebAppStack", {
 });
 const productServiceStack = new ProductServiceStack(
   app,
-  "product-service-lambda-stack"
+  "product-service-lambda-stack",
+  {
+    env: { region: "us-east-1" },
+  }
 );
-new ImportServiceStack(app, "import-service-s3-stack-4", {
-  catalogItemsQueue: productServiceStack.catalogItemsQueue,
-});
+new AuthorizationServiceStack(app, "AuthorizationServiceStack");
+const importServiceStack = new ImportServiceStack(
+  app,
+  "import-service-s3-stack-4",
+  {
+    catalogItemsQueue: productServiceStack.catalogItemsQueue,
+    env: { region: "us-east-1" },
+  }
+);
+const importApiGatewayStack = new ImportApiGatewayStack(
+  app,
+  "ImportApiGatewayStack",
+  {
+    env: { region: "us-east-1" },
+  }
+);
+// Add dependency to ensure ImportServiceStack is deployed first
+importApiGatewayStack.addDependency(importServiceStack);

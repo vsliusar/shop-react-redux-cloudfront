@@ -1,12 +1,12 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import { Construct } from "constructs";
 import * as s3n from "aws-cdk-lib/aws-lambda-event-sources";
 import { join } from "path";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { IQueue } from "aws-cdk-lib/aws-sqs";
+import { CfnOutput } from "aws-cdk-lib";
 
 interface ImportServiceStackProps extends cdk.StackProps {
   catalogItemsQueue: IQueue;
@@ -48,24 +48,6 @@ export class ImportServiceStack extends cdk.Stack {
       }
     );
 
-    bucket.grantReadWrite(importProductsFileLambda);
-
-    const api = new apigateway.RestApi(this, "ImportServiceAPI", {
-      restApiName: "Import Service API",
-    });
-
-    const importResource = api.root.addResource("import");
-    importResource.addMethod(
-      "GET",
-      new apigateway.LambdaIntegration(importProductsFileLambda)
-    );
-
-    importResource.addCorsPreflight({
-      allowOrigins: ["*"],
-      allowMethods: ["GET", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"],
-    });
-
     const importFileParserLambda = new NodejsFunction(
       this,
       "ImportFileParserLambda",
@@ -79,6 +61,7 @@ export class ImportServiceStack extends cdk.Stack {
       }
     );
 
+    bucket.grantReadWrite(importProductsFileLambda);
     bucket.grantReadWrite(importFileParserLambda);
 
     importFileParserLambda.addEventSource(
@@ -94,5 +77,10 @@ export class ImportServiceStack extends cdk.Stack {
       catalogItemsQueue.queueUrl
     );
     catalogItemsQueue.grantSendMessages(importFileParserLambda);
+
+    new CfnOutput(this, "ImportProductsFileLambdaArn", {
+      value: importProductsFileLambda.functionArn,
+      exportName: `${cdk.Stack.of(this).stackName}-ImportProductsFileLambdaArn`,
+    });
   }
 }
